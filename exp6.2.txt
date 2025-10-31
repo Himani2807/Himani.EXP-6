@@ -1,0 +1,119 @@
+const express = require("express");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+
+const app = express();
+app.use(express.json());
+
+// Fake user record (Real app → Store DB)
+const user = {
+  id: 1,
+  username: "testuser",
+  passwordHash: bcrypt.hashSync("password123", 10), // encrypted password
+};
+
+// Secret key for JWT signing
+const JWT_SECRET = "BANKING_API_SECRET_KEY";   // Recommended → Use .env
+
+// ===================================================
+//       1) USER LOGIN – RETURNS JWT
+// ===================================================
+app.post("/login", (req, res) => {
+  const { username, password } = req.body;
+
+  if (username !== user.username) {
+    return res.status(401).json({ message: "Invalid username" });
+  }
+
+  const validPassword = bcrypt.compareSync(password, user.passwordHash);
+  if (!validPassword) {
+    return res.status(401).json({ message: "Invalid password" });
+  }
+
+  // Create JWT
+  const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
+    expiresIn: "1h",
+  });
+
+  res.json({
+    message: "Login successful",
+    token,
+  });
+});
+
+// ===================================================
+//       2) JWT VERIFY MIDDLEWARE
+// ===================================================
+function verifyToken(req, res, next) {
+  const authHeader = req.headers["authorization"]; // Bearer token
+
+  if (!authHeader) {
+    return res.status(401).json({ message: "Token required" });
+  }
+
+  const [type, token] = authHeader.split(" ");
+
+  if (type !== "Bearer" || !token) {
+    return res.status(401).json({ message: "Invalid token format" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.userId;    // Attach user ID to request
+    next();
+  } catch (error) {
+    return res.status(403).json({ message: "Invalid or expired token" });
+  }
+}
+
+// ===================================================
+//       3) BANKING APIs (Protected)
+// ===================================================
+
+// ✅ Account Balance
+app.get("/account/balance", verifyToken, (req, res) => {
+  res.json({
+    account: "1234567890",
+    balance: 25430.75,
+  });
+});
+
+// ✅ Fund Transfer
+app.post("/account/transfer", verifyToken, (req, res) => {
+  const { toAccount, amount } = req.body;
+
+  if (!toAccount || !amount) {
+    return res.status(400).json({ message: "Invalid request" });
+  }
+
+  res.json({
+    message: "Transfer Successful",
+    from: req.userId,
+    to: toAccount,
+    amount,
+  });
+});
+
+// ✅ Transaction History
+app.get("/account/transactions", verifyToken, (req, res) => {
+  res.json({
+    transactions: [
+      { date: "2024-10-20", amount: -500, desc: "ATM Withdrawal" },
+      { date: "2024-10-21", amount: 2000, desc: "Salary Credit" },
+    ],
+  });
+});
+
+// ===================================================
+//       4) ROOT
+// ===================================================
+app.get("/", (req, res) => {
+  res.json({ message: "Banking API running securely 🔐" });
+});
+
+// ===================================================
+//       START SERVER
+// ===================================================
+app.listen(3000, () => {
+  console.log("Server running on port 3000");
+});

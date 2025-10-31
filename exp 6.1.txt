@@ -1,0 +1,39 @@
+const express = require("express");
+const app = express();
+
+// ----- Logging Middleware -----
+function logger(req, res, next) {
+  console.log(`${req.method} ${req.url} — Time: ${new Date()}`);
+  next();
+}
+
+// ----- Bearer Token Middleware -----
+function auth(req, res, next) {
+  const authHeader = req.headers["authorization"];
+
+  if (!authHeader) {
+    return res.status(401).json({ message: "No token provided" });
+  }
+
+  const [type, token] = authHeader.split(" ");
+
+  if (type !== "Bearer" || token !== "12345") {
+    return res.status(403).json({ message: "Invalid token" });
+  }
+  next();
+}
+
+// Logger middleware applied globally
+app.use(logger);
+
+// Protected route
+app.get("/secure", auth, (req, res) => {
+  res.json({ message: "Access granted ✅" });
+});
+
+// Public route
+app.get("/", (req, res) => {
+  res.json({ message: "Welcome 🚀" });
+});
+
+app.listen(3000, () => console.log("Server running on port 3000"));
